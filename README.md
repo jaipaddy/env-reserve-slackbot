@@ -12,6 +12,11 @@ Use Slack chat bot to help streamline test environment reservation. Users can re
 6. Build the docker image - `docker build . -t qaslackbot:qa`
 7. Use Docker swarm or compose to run the container - `docker-compose up`
 
+# Sample output
+
+
+![ScreenShot](https://raw.github.com/jaipaddy/env-reserve-slackbot/master/SlackBotScreenshot.png)
+
 # Applications
 The methodology used in this app can be extended to starting and shutting down test environments via another script/API or any task that requires exclusive access
 
