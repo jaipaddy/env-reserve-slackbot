@@ -71,13 +71,13 @@ class QASlackBot:
 
   def process_message(self, message):
     self.channel = message['channel']
-    if message['text'].lower() == "help":
+    if message['text'].lower().find(" help") == 12:
         welcome = "```Welcome to the QA environment reservation system! \nPlease type one of the following <stack> to reserve it.\n \
 qa1\n qa2\n qa3\n qa4\n stage2\n sandbox1\nWhen you are done, type release <stack> OR <stack> release\nTo check current \
-reservations, type status\nNOTE - There is a usage limit of 8 hours```"
+reservations, type @qabot status\nNOTE - There is a usage limit of 8 hours```"
         self.post(message['channel'], welcome)
         log.debug("Posting to {0}: {1}".format(message['channel'], welcome))
-    elif message['text'].lower() == "status":
+    elif message['text'].lower().find(" status") == 12:
         if not self.reservedict.keys():
           self.post(message['channel'], "All stacks available!") 
           log.debug("Posting to {0}: {1}".format(message['channel'], "All stacks available!"))
@@ -112,11 +112,12 @@ reservations, type status\nNOTE - There is a usage limit of 8 hours```"
     if message['text'].lower() == 'y' or message['text'].lower() == 'yes':
         id = message['user']
         for key in self.overridedict.keys():
-            print 'take over'
-            response = self.topics[key].format(self.overridedict[key], key)
-            self.reservedict[key] = [self.overridedict[key],  datetime.now()]
-            log.info("Posting to {0}: {1}".format(message['channel'], response))
-            self.post(message['channel'], response)
+            if self.overridedict[key] == self.userdict[id]:
+                log.info("Take over")
+                response = self.topics[key].format(self.overridedict[key], key)
+                self.reservedict[key] = [self.overridedict[key],  datetime.now()]
+                print("Posting to {0}: {1}".format(message['channel'], response))
+                self.post(message['channel'], response)
         
         self.overridedict ={}
          
