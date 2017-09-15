@@ -1,0 +1,8 @@
+ApiVersion
+WebVersion
+RabbitConsumersVersion
+AdminVersion
+CsrVersion
+AssetVersion
+Manifest
+BundlerVersion
