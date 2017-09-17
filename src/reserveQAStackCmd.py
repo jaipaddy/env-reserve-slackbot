@@ -14,17 +14,16 @@ __email__ = 'jai.padmanabhan@gmail.com'
 logging.basicConfig(format='[%(filename)s:%(lineno)s] %(message)s', level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
-TIMEOUT=30
-#Jenkins env variables
-JENKINS=os.environ.get("JENKINS", "jenkins url")
+TIMEOUT=10
+JENKINS="http://jenkins1.internal2.savewave.com"
 JENKINS_URL= JENKINS+ "/buildByToken/buildWithParameters?job={0}&token={1}&Stack={2}"
-JENKINS_TOKEN=os.environ.get("JENKINS_TOKEN", None)
-JENKINS_RUBY_JOB=os.environ.get("JENKINS_RUBY_JOB", None)
-JENKINS_JAVA_JOB=os.environ.get("JENKINS_JAVA_JOB", None)
-JENKINS_FULL_JOB=os.environ.get("JENKINS_FULL_JOB", None)
-JENKINS_RUBY_JOB_LINK=os.environ.get("JENKINS_RUBY_JOB_LINK", "jenkins url")
-JENKINS_JAVA_JOB_LINK=os.environ.get("JENKINS_JAVA_JOB_LINK", "jenkins url")
-JENKINS_FULL_JOB_LINK=os.environ.get("JENKINS_FULL_JOB_LINK", "jenkins url")
+JENKINS_TOKEN="blah"
+JENKINS_RUBY_JOB="RubyDeploy_NO_Datagen"
+JENKINS_JAVA_JOB="JavaDeploy_NO_Datagen"
+JENKINS_FULL_JOB="FullDeploy_NO_Datagen"
+JENKINS_RUBY_JOB_LINK="http://jenkins1.internal2.savewave.com/view/qa/view/QA%20Stacks/view/Deploy-NoDatagen/job/RubyDeploy_NO_Datagen/"
+JENKINS_JAVA_JOB_LINK="http://jenkins1.internal2.savewave.com/view/qa/view/QA%20Stacks/view/Deploy-NoDatagen/job/JavaDeploy_NO_Datagen/"
+JENKINS_FULL_JOB_LINK="http://jenkins1.internal2.savewave.com/view/qa/view/QA%20Stacks/view/Deploy-NoDatagen/job/FullDeploy_NO_Datagen/"
 
 class QASlackBot:
   topics = {}
@@ -44,7 +43,7 @@ class QASlackBot:
       # retrieve all users
       users = api_call.get('members')
       for user in users:
-         self.userdict[user['id']] = user['name']
+         self.userdict[user['id']] = user['name']   
          # pprint.pprint(self.userdict)
 
 
@@ -65,7 +64,7 @@ class QASlackBot:
               self.process_message(action)
         else:
           sleep(1)
-
+          
            # Check for time reserved and release when time is up
         for key in self.topics.keys():
             if key in self.reservedict:
@@ -75,120 +74,56 @@ class QASlackBot:
                     log.debug( msg)
                     self.post(self.channel, msg)
                     del self.reservedict[key]
-
+                            
       except Exception as e:
         log.error("Exception: ", e.message)
 
+
   def process_message(self, message):
-    self.channel = message['channel']
+    self.channel = message['channel']  
     self.message = message['text']
-
+    
     if self.message.lower().find(" help") == 12:
-        self.post(self.channel, "```Welcome to the QA environment reservation system! \nPlease type one of the following <stack> to reserve it.\n \
-qa1\n qa2\n qa3\n qa4\n stage2\n sandbox1\nWhen you are done, type release <stack> OR <stack> release\nTo check current \
-reservations, type @qabot status\nTo deploy to the reserved stack:\n<stack> deploy full OR\n<stack> deploy full | ApiVersion=SAV-3001-api,WebVersion=SAV-3000-web,\
-RabbitConsumersVersion=master,AdminVersion=master,CsrVersion=master,Manifest=20170909\nDeploy Ruby only with <stack> deploy ruby \
-OR <stack> deploy ruby | ApiVersion=master,WebVersion=SAV-3000-web\nDeploy Java only with <stack> deploy java OR <stack> deploy java | Manifest=20170909\n\
-NOTE - There is a usage limit of 8 hours```")
+        self.help()
     elif self.message.lower().find(" status") == 12:
-        if not self.reservedict.keys():
-          self.post(self.channel, "All stacks available!")
-        for key in self.reservedict.keys():
-            response = self.topics[key].format(self.reservedict[key][0], key)
-            self.post(self.channel, response)
-            log.info(response)
-
+        self.status()
+        
     for key in self.topics.keys():
       if self.message.lower().startswith(key) and self.message.lower().endswith(key) or self.message.lower().startswith("using " + key) or self.message.lower().startswith("on " + key):
         id = message['user']
         # Hold state of who is using the stack
         if  key not in self.reservedict :
-            log.info( "not there")
-            self.reservedict[key] = [self.userdict[id],  datetime.now()]
-            response = self.topics[key].format(self.userdict[id], key)
-            log.info("Posting to {0}: {1}".format(self.channel, response))
-            self.post(self.channel, response)
+            response = self.newreservation(key, id)
         else:
-            log.info("Stack already taken")
-            self.overridedict[key] = self.userdict[id]
-            response = self.topics[key].format(self.reservedict[key][0], key) + " . Are you sure you want to reserve it instead? Type `y` or `n`"
-            log.info("Posting to {0}: {1}".format(self.channel, response))
-            self.post(self.channel, response)
+            response = self.existingReservation(key, id)
       elif key in self.reservedict and (self.message.lower().startswith("release " + key) or self.message.lower().startswith(key+" release")):
-          log.info ("release by user")
-          response = self.reservedict[key][0] + " has released stack " + key
-          del self.reservedict[key]
-          self.post(self.channel, response)
-
+          response = self.releaseStack(key)
+          
           # ************* Jenkins Deploy ******************
-          # deploy full
+          # deploy full  
       elif  self.message.lower().startswith(key) and " deploy" in self.message.lower() and self.message.lower().endswith(" full") :
-          url = JENKINS_URL.format(JENKINS_FULL_JOB, JENKINS_TOKEN, key)
-          if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
-            self.parseBuild(url, message)
-          else:
-              self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
+          self.fulldeploy(message, key)  
           # deploy full | ApiVersion=master,WebVersion=SAV-3000
       elif self.message.lower().startswith(key) and (self.message.lower().find(" deploy") <  self.message.lower().find(" full")) and not self.message.lower().endswith("full") and "|" in self.message:
-           log.info("Parsing build params")
-           s = self.message.split("|")[1].strip()
-           self.buildparams = dict(item.split("=") for item in s.split(","))
-           log.info( self.buildparams)
-           url = JENKINS_URL.format(JENKINS_FULL_JOB, JENKINS_TOKEN, key)
-           if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
-            self.parseBuild(url, message)
-           else:
-              self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
+           self.fulldeployParams(message, key)  
            # deploy java
       elif self.message.lower().startswith(key) and " deploy" in self.message.lower() and self.message.lower().endswith(" java") :
-          url = JENKINS_URL.format(JENKINS_JAVA_JOB, JENKINS_TOKEN, key)
-          if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
-            self.parseBuild(url, message)
-          else:
-              self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
+          self.deployjava(message, key)  
           # deploy java | Manifest=20170909
       elif self.message.lower().startswith(key) and (self.message.lower().find(" deploy") <  self.message.lower().find(" java")) and not self.message.lower().endswith("java") and "|" in self.message and "Manifest" in self.message:
-           log.info("Parsing build params")
-           s = self.message.split("|")[1].strip()
-           self.buildparams = dict(item.split("=") for item in s.split(","))
-           log.info( self.buildparams)
-           url = JENKINS_URL.format(JENKINS_JAVA_JOB, JENKINS_TOKEN, key)
-           if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
-            self.parseBuild(url, message)
-           else:
-              self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
-           #deploy ruby
+           self.deployjavaParams(message, key)  
+           #deploy ruby 
       elif self.message.lower().startswith(key) and " deploy" in self.message.lower() and self.message.lower().endswith(" ruby") :
-          url = JENKINS_URL.format(JENKINS_RUBY_JOB, JENKINS_TOKEN, key)
-          if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
-            self.parseBuild(url, message)
-          else:
-              self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
+          self.deployruby(message, key)  
           # deploy ruby | ApiVersion=SAV-3000,WebVersion=master
       elif self.message.lower().startswith(key) and (self.message.lower().find(" deploy") <  self.message.lower().find(" ruby")) and not self.message.lower().endswith("java") and "|" in self.message and "Manifest" not in self.message:
-           log.info("Parsing build params")
-           s = self.message.split("|")[1].strip()
-           self.buildparams = dict(item.split("=") for item in s.split(","))
-           url = JENKINS_URL.format(JENKINS_RUBY_JOB, JENKINS_TOKEN, key)
-           if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
-            self.parseBuild(url, message)
-           else:
-              self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
-
+           self.deployrubyParams(message, key)  
+                
           #respond to user's secondary msg
     if self.message.lower() == 'y' or self.message.lower() == 'yes':
-        id = message['user']
-        for key in self.overridedict.keys():
-            if self.overridedict[key] == self.userdict[id]:
-                log.info("take over")
-                response = self.topics[key].format(self.overridedict[key], key)
-                self.reservedict[key] = [self.overridedict[key],  datetime.now()]
-                log.info("Posting to {0}: {1}".format(self.channel, response))
-                self.post(self.channel, response)
-
-        self.overridedict ={}
-
-
+        self.overrideReservation(message, key)
+         
+            
   def post(self, channel, message):
     chan = self.client.server.channels.find(channel)
     if not chan:
@@ -202,8 +137,8 @@ NOTE - There is a usage limit of 8 hours```")
       if r.status_code != 201:
          self.post(self.channel, "`Could not launch Jenkins job !`s")
       else:
-         log.info("Launched Jenkins job "+url)
-
+         log.info("Launched Jenkins job "+url)  
+    
   def parseBuild(self, url, message):
        flag=True
        for k in self.buildparams.keys():
@@ -212,7 +147,7 @@ NOTE - There is a usage limit of 8 hours```")
                else:
                    flag=False
                    self.post(self.channel, "`Check the parameters passed! Try @qabot help`")
-       if flag:
+       if flag:         
           self.launchJenkins(url, message)
           link =""
           if "ruby" in url.lower():
@@ -220,10 +155,111 @@ NOTE - There is a usage limit of 8 hours```")
           elif  "java" in url.lower():
               link = JENKINS_JAVA_JOB_LINK
           elif "full" in url.lower():
-              link = JENKINS_FULL_JOB_LINK
-          self.post(self.channel, "Jenkins job successfully launched at "+ link)
+              link = JENKINS_FULL_JOB_LINK       
+          self.post(self.channel, "Jenkins job successfully launched at "+ link)      
+          
+       self.buildparams = {}   
 
-       self.buildparams = {}
+  def help(self):
+      self.post(self.channel, "```Welcome to the QA environment reservation system! \nPlease type one of the following <stack> to reserve it.\n \
+qa1\n qa2\n qa3\n qa4\n stage2\n sandbox1\nWhen you are done, type release <stack> OR <stack> release\nTo check current \
+reservations, type @qabot status\nTo deploy to the reserved stack:\n<stack> deploy full OR\n<stack> deploy full | ApiVersion=SAV-3001-api,WebVersion=SAV-3000-web,\
+RabbitConsumersVersion=master,AdminVersion=master,CsrVersion=master,Manifest=20170909\nDeploy Ruby only with <stack> deploy ruby \
+OR <stack> deploy ruby | ApiVersion=master,WebVersion=SAV-3000-web\nDeploy Java only with <stack> deploy java OR <stack> deploy java | Manifest=20170909\n\
+NOTE - There is a usage limit of 8 hours```")
+
+  def status(self):
+      if not self.reservedict.keys():
+          self.post(self.channel, "All stacks available!")
+      for key in self.reservedict.keys():
+          response = self.topics[key].format(self.reservedict[key][0], key)
+          self.post(self.channel, response)
+          log.info(response)
+      
+  def newreservation(self, key, id):
+      log.info("not there")
+      self.reservedict[key] = [self.userdict[id], datetime.now()]
+      response = self.topics[key].format(self.userdict[id], key)
+      log.info("Posting to {0}: {1}".format(self.channel, response))
+      self.post(self.channel, response)
+
+  def existingReservation(self, key, id):
+      log.info("Stack already taken")
+      self.overridedict[key] = self.userdict[id]
+      response = self.topics[key].format(self.reservedict[key][0], key) + " . Are you sure you want to reserve it instead? Type `y` or `n`"
+      log.info("Posting to {0}: {1}".format(self.channel, response))
+      self.post(self.channel, response)
+
+  def releaseStack(self, key):
+      log.info("release by user")
+      response = self.reservedict[key][0] + " has released stack " + key
+      del self.reservedict[key]
+      self.post(self.channel, response)
+
+  def fulldeploy(self, message, key):
+      url = JENKINS_URL.format(JENKINS_FULL_JOB, JENKINS_TOKEN, key)
+      if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
+          self.parseBuild(url, message)
+      else:
+          self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
+
+  def fulldeployParams(self, message, key):
+      log.info("Parsing build params")
+      s = self.message.split("|")[1].strip()
+      self.buildparams = dict(item.split("=") for item in s.split(","))
+      log.info(self.buildparams)
+      url = JENKINS_URL.format(JENKINS_FULL_JOB, JENKINS_TOKEN, key)
+      if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
+          self.parseBuild(url, message)
+      else:
+          self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
+
+  def deployjava(self, message, key):
+      url = JENKINS_URL.format(JENKINS_JAVA_JOB, JENKINS_TOKEN, key)
+      if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
+          self.parseBuild(url, message)
+      else:
+          self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
+
+  def deployjavaParams(self, message, key):
+      log.info("Parsing build params")
+      s = self.message.split("|")[1].strip()
+      self.buildparams = dict(item.split("=") for item in s.split(","))
+      log.info(self.buildparams)
+      url = JENKINS_URL.format(JENKINS_JAVA_JOB, JENKINS_TOKEN, key)
+      if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
+          self.parseBuild(url, message)
+      else:
+          self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
+
+  def deployruby(self, message, key):
+      url = JENKINS_URL.format(JENKINS_RUBY_JOB, JENKINS_TOKEN, key)
+      if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
+          self.parseBuild(url, message)
+      else:
+          self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
+
+  def deployrubyParams(self, message, key):
+      log.info("Parsing build params")
+      s = self.message.split("|")[1].strip()
+      self.buildparams = dict(item.split("=") for item in s.split(","))
+      url = JENKINS_URL.format(JENKINS_RUBY_JOB, JENKINS_TOKEN, key)
+      if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
+          self.parseBuild(url, message)
+      else:
+          self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
+
+  def overrideReservation(self, message, key):
+      id = message['user']
+      for key in self.overridedict.keys():
+          if self.overridedict[key] == self.userdict[id]:
+              log.info("take over")
+              response = self.topics[key].format(self.overridedict[key], key)
+              self.reservedict[key] = [self.overridedict[key], datetime.now()]
+              log.info("Posting to {0}: {1}".format(self.channel, response))
+              self.post(self.channel, response)
+      
+      self.overridedict = {}
 
 # Main
 
@@ -258,9 +294,9 @@ converse.py topics.json
   # Add our topics to the bot
   with open(args.topics_file[0]) as data_file:
     bot.topics = json.load(data_file)
-
+    
   with open(args.buildparams_file[0]) as data_file:
     bot.buildparamsList = data_file.read().splitlines()
-
+    
   # Run our conversation loop.
   bot.listen()
