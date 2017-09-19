@@ -89,7 +89,7 @@ class QASlackBot:
         self.status()
         
     for key in self.topics.keys():
-      if self.message.lower().startswith(key) and self.message.lower().endswith(key) or self.message.lower().startswith("using " + key) or self.message.lower().startswith("on " + key):
+      if self.message.lower().startswith(key) and self.message.lower().endswith(key) or self.message.lower().startswith("using " + key) or self.message.lower().startswith("on " + key) or self.message.lower().startswith("reserve " + key):
         id = message['user']
         # Hold state of who is using the stack
         if  key not in self.reservedict :

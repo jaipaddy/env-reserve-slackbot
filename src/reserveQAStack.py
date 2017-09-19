@@ -4,6 +4,7 @@ import json, os, logging, requests
 from datetime import datetime
 from slackclient import SlackClient
 from time import sleep
+from syslog import LOG_DEBUG
 
 __app_name__ = 'QA environment reservation Slack Bot'
 __author__ = 'Jaishankar Padmanabhan'
@@ -24,11 +25,15 @@ JENKINS_FULL_JOB=os.environ.get("JENKINS_FULL_JOB", None)
 JENKINS_RUBY_JOB_LINK=os.environ.get("JENKINS_RUBY_JOB_LINK", "jenkins url")
 JENKINS_JAVA_JOB_LINK=os.environ.get("JENKINS_JAVA_JOB_LINK", "jenkins url")
 JENKINS_FULL_JOB_LINK=os.environ.get("JENKINS_FULL_JOB_LINK", "jenkins url")
-
 BUILDPARAMS_FILE=os.environ.get("BUILDPARAMS_FILE", None)
 
-
-logging.basicConfig(format='[%(filename)s:%(lineno)s] %(message)s', level=logging.INFO)
+#Debug logging
+LOG_DEBUG=os.environ.get("LOG_DEBUG", "true")
+if LOG_DEBUG == "false":
+    logging.basicConfig(format='[%(filename)s:%(lineno)s] %(message)s', level=logging.INFO)
+else:
+    logging.basicConfig(format='[%(filename)s:%(lineno)s] %(message)s', level=logging.DEBUG)    
+    
 log = logging.getLogger(__name__)
 
 class QASlackBot:
@@ -52,7 +57,6 @@ class QASlackBot:
       for user in users:
          self.userdict[user['id']] = user['name']
     #log.debug(self.userdict)    
-
 
   def connect(self, token):
     self.client = SlackClient(token)
@@ -95,13 +99,15 @@ class QASlackBot:
         self.status()
         
     for key in self.topics.keys():
-      if self.message.lower().startswith(key) and self.message.lower().endswith(key) or self.message.lower().startswith("using " + key) or self.message.lower().startswith("on " + key):
+      if self.message.lower().startswith(key) and self.message.lower().endswith(key) or self.message.lower().startswith("using " + key) or self.message.lower().startswith("on " + key) or self.message.lower().startswith("reserve " + key):
         id = message['user']
         # Hold state of who is using the stack
         if  key not in self.reservedict :
             response = self.newreservation(key, id)
+         # If stack is already reserved   
         else:
             response = self.existingReservation(key, id)
+           # Release stack 
       elif key in self.reservedict and (self.message.lower().startswith("release " + key) or self.message.lower().startswith(key+" release")):
           response = self.releaseStack(key)
           
@@ -210,10 +216,10 @@ NOTE - There is a usage limit of 8 hours```")
           self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
 
   def fulldeployParams(self, message, key):
-      log.info("Parsing build params")
+      log.debug("Parsing build params")
       s = self.message.split("|")[1].strip()
       self.buildparams = dict(item.split("=") for item in s.split(","))
-      log.info(self.buildparams)
+      log.debug(self.buildparams)
       url = JENKINS_URL.format(JENKINS_FULL_JOB, JENKINS_TOKEN, key)
       if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
           self.parseBuild(url, message)
@@ -228,10 +234,10 @@ NOTE - There is a usage limit of 8 hours```")
           self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
 
   def deployjavaParams(self, message, key):
-      log.info("Parsing build params")
+      log.debug("Parsing build params")
       s = self.message.split("|")[1].strip()
       self.buildparams = dict(item.split("=") for item in s.split(","))
-      log.info(self.buildparams)
+      log.debug(self.buildparams)
       url = JENKINS_URL.format(JENKINS_JAVA_JOB, JENKINS_TOKEN, key)
       if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
           self.parseBuild(url, message)
