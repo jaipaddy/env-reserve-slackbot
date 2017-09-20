@@ -35,9 +35,9 @@ else:
     logging.basicConfig(format='[%(filename)s:%(lineno)s] %(message)s', level=logging.DEBUG)    
     
 log = logging.getLogger(__name__)
+topics = {}
 
 class QASlackBot:
-  topics = {}
   buildparams = {}
   client = None
   my_user_name = ''
@@ -77,7 +77,7 @@ class QASlackBot:
           sleep(1)
           
           # Check for time reserved and release when time is up
-        for key in self.topics.keys():
+        for key in topics.keys():
             if key in self.reservedict:
                 elapsed = datetime.now() - self.reservedict[key][1]
                 if elapsed.total_seconds() > TIMEOUT:
@@ -98,8 +98,8 @@ class QASlackBot:
     elif self.message.lower().find(" status") == 12:
         self.status()
         
-    for key in self.topics.keys():
-      if self.message.lower().startswith(key) and self.message.lower().endswith(key) or self.message.lower().startswith("using " + key) or self.message.lower().startswith("on " + key) or self.message.lower().startswith("reserve " + key):
+    for key in topics.keys():
+      if self.message.lower().startswith("using " + key) or self.message.lower().startswith("on " + key) or self.message.lower().startswith("reserve " + key) or self.message.lower().startswith(key+" reserve"):
         id = message['user']
         # Hold state of who is using the stack
         if  key not in self.reservedict :
@@ -173,8 +173,8 @@ class QASlackBot:
        self.buildparams = {}    
 
   def help(self):
-      self.post(self.channel, "```Welcome to the QA environment reservation system! \nPlease type one of the following <stack> to reserve it.\n \
-qa1\n qa2\n qa3\n qa4\n stage2\n sandbox1\nWhen you are done, type release <stack> OR <stack> release\nTo check current \
+      self.post(self.channel, "```Welcome to the QA environment reservation system! \nPlease type 'reserve <stack>' or '<stack> reserve' to reserve one of the following\n \
+qa1\n qa2\n qa3\n qa4\n stage2\n sandbox1\nWhen you are done, type 'release <stack>' OR '<stack> release'\nTo check current \
 reservations, type @qabot status\nTo deploy to the reserved stack:\n<stack> deploy full OR\n<stack> deploy full | ApiVersion=SAV-3001-api,WebVersion=SAV-3000-web,\
 RabbitConsumersVersion=master,AdminVersion=master,CsrVersion=master,Manifest=20170909\nDeploy Ruby only with <stack> deploy ruby \
 OR <stack> deploy ruby | ApiVersion=master,WebVersion=SAV-3000-web\nDeploy Java only with <stack> deploy java OR <stack> deploy java | Manifest=20170909\n\
@@ -184,21 +184,21 @@ NOTE - There is a usage limit of 8 hours```")
       if not self.reservedict.keys():
           self.post(self.channel, "All stacks available!")
       for key in self.reservedict.keys():
-          response = self.topics[key].format(self.reservedict[key][0], key)
+          response = topics[key].format(self.reservedict[key][0], key)
           self.post(self.channel, response)
           log.info(response)
       
   def newreservation(self, key, id):
       log.info("not there")
       self.reservedict[key] = [self.userdict[id], datetime.now()]
-      response = self.topics[key].format(self.userdict[id], key)
+      response = topics[key].format(self.userdict[id], key)
       log.info("Posting to {0}: {1}".format(self.channel, response))
       self.post(self.channel, response)
 
   def existingReservation(self, key, id):
       log.info("Stack already taken")
       self.overridedict[key] = self.userdict[id]
-      response = self.topics[key].format(self.reservedict[key][0], key) + " . Are you sure you want to reserve it instead? Type `y` or `n`"
+      response = topics[key].format(self.reservedict[key][0], key) + " . Are you sure you want to reserve it instead? Type `y` or `n`"
       log.info("Posting to {0}: {1}".format(self.channel, response))
       self.post(self.channel, response)
 
@@ -266,7 +266,7 @@ NOTE - There is a usage limit of 8 hours```")
       for key in self.overridedict.keys():
           if self.overridedict[key] == self.userdict[id]:
               log.info("take over")
-              response = self.topics[key].format(self.overridedict[key], key)
+              response = topics[key].format(self.overridedict[key], key)
               self.reservedict[key] = [self.overridedict[key], datetime.now()]
               log.info("Posting to {0}: {1}".format(self.channel, response))
               self.post(self.channel, response)
@@ -290,7 +290,7 @@ if __name__ == "__main__":
 
   # Add our topics to the bot
   with open(DATA_FILE) as data_file:
-    bot.topics = json.load(data_file)
+    topics = json.load(data_file)
  
  # Read Jenkins parameters into list
   with open(BUILDPARAMS_FILE) as data_file:
