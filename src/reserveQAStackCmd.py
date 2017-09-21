@@ -14,7 +14,7 @@ __email__ = 'jai.padmanabhan@gmail.com'
 logging.basicConfig(format='[%(filename)s:%(lineno)s] %(message)s', level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
-TIMEOUT=900
+TIMEOUT=15
 JENKINS="http://jenkins1.internal2.savewave.com"
 JENKINS_URL= JENKINS+ "/buildByToken/buildWithParameters?job={0}&token={1}&Stack={2}"
 JENKINS_TOKEN="blah"
@@ -72,7 +72,7 @@ class QASlackBot:
                 if elapsed.total_seconds() > TIMEOUT:
                     msg = "@{0} 8 hrs up! Released stack `{1}`".format(self.reservedict[key][0], key)
                     log.debug( msg)
-                    self.post(self.channel, msg)
+                    self.post(self.reservedict[key][2], msg)
                     del self.reservedict[key]
                             
       except Exception as e:
@@ -120,7 +120,7 @@ class QASlackBot:
            self.deployrubyParams(message, key)  
                 
           #respond to user's secondary msg
-    if self.message.lower() == 'y' or self.message.lower() == 'yes':
+    if self.message.lower() == 'y' :
         self.overrideReservation(message, key)
          
             
@@ -178,7 +178,7 @@ NOTE - There is a usage limit of 8 hours```")
       
   def newreservation(self, key, id):
       log.info("not there")
-      self.reservedict[key] = [self.userdict[id], datetime.now()]
+      self.reservedict[key] = [self.userdict[id], datetime.now(), self.channel]
       response = topics[key].format(self.userdict[id], key)
       log.info("Posting to {0}: {1}".format(self.channel, response))
       self.post(self.channel, response)
@@ -193,8 +193,8 @@ NOTE - There is a usage limit of 8 hours```")
   def releaseStack(self, key):
       log.info("release by user")
       response = self.reservedict[key][0] + " has released stack " + key
+      self.post(self.reservedict[key][2], response)
       del self.reservedict[key]
-      self.post(self.channel, response)
 
   def fulldeploy(self, message, key):
       url = JENKINS_URL.format(JENKINS_FULL_JOB, JENKINS_TOKEN, key)
@@ -255,7 +255,7 @@ NOTE - There is a usage limit of 8 hours```")
           if self.overridedict[key] == self.userdict[id]:
               log.info("take over")
               response = topics[key].format(self.overridedict[key], key)
-              self.reservedict[key] = [self.overridedict[key], datetime.now()]
+              self.reservedict[key] = [self.overridedict[key], datetime.now(), self.channel]
               log.info("Posting to {0}: {1}".format(self.channel, response))
               self.post(self.channel, response)
       

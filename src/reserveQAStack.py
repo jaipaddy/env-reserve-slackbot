@@ -82,12 +82,13 @@ class QASlackBot:
                 elapsed = datetime.now() - self.reservedict[key][1]
                 if elapsed.total_seconds() > TIMEOUT:
                     msg = "@{0} 8 hrs up! Released stack `{1}`".format(self.reservedict[key][0], key)
-                    log.debug(msg)
-                    self.post(self.channel, msg)
+                    log.debug( msg)
+                    self.post(self.reservedict[key][2], msg)
                     del self.reservedict[key]
                             
       except Exception as e:
         log.error("Exception: ", e.message)
+
 
   def process_message(self, message):
     self.channel = message['channel']  
@@ -104,10 +105,8 @@ class QASlackBot:
         # Hold state of who is using the stack
         if  key not in self.reservedict :
             response = self.newreservation(key, id)
-         # If stack is already reserved   
         else:
             response = self.existingReservation(key, id)
-           # Release stack 
       elif key in self.reservedict and (self.message.lower().startswith("release " + key) or self.message.lower().startswith(key+" release")):
           response = self.releaseStack(key)
           
@@ -132,7 +131,7 @@ class QASlackBot:
            self.deployrubyParams(message, key)  
                 
           #respond to user's secondary msg
-    if self.message.lower() == 'y' or self.message.lower() == 'yes':
+    if self.message.lower() == 'y' :
         self.overrideReservation(message, key)
          
             
@@ -170,7 +169,7 @@ class QASlackBot:
               link = JENKINS_FULL_JOB_LINK       
           self.post(self.channel, "Jenkins job successfully launched at "+ link)      
           
-       self.buildparams = {}    
+       self.buildparams = {}   
 
   def help(self):
       self.post(self.channel, "```Welcome to the QA environment reservation system! \nPlease type 'reserve <stack>' or '<stack> reserve' to reserve one of the following\n \
@@ -190,7 +189,7 @@ NOTE - There is a usage limit of 8 hours```")
       
   def newreservation(self, key, id):
       log.info("not there")
-      self.reservedict[key] = [self.userdict[id], datetime.now()]
+      self.reservedict[key] = [self.userdict[id], datetime.now(), self.channel]
       response = topics[key].format(self.userdict[id], key)
       log.info("Posting to {0}: {1}".format(self.channel, response))
       self.post(self.channel, response)
@@ -205,8 +204,8 @@ NOTE - There is a usage limit of 8 hours```")
   def releaseStack(self, key):
       log.info("release by user")
       response = self.reservedict[key][0] + " has released stack " + key
+      self.post(self.reservedict[key][2], response)
       del self.reservedict[key]
-      self.post(self.channel, response)
 
   def fulldeploy(self, message, key):
       url = JENKINS_URL.format(JENKINS_FULL_JOB, JENKINS_TOKEN, key)
@@ -216,10 +215,10 @@ NOTE - There is a usage limit of 8 hours```")
           self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
 
   def fulldeployParams(self, message, key):
-      log.debug("Parsing build params")
+      log.info("Parsing build params")
       s = self.message.split("|")[1].strip()
       self.buildparams = dict(item.split("=") for item in s.split(","))
-      log.debug(self.buildparams)
+      log.info(self.buildparams)
       url = JENKINS_URL.format(JENKINS_FULL_JOB, JENKINS_TOKEN, key)
       if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
           self.parseBuild(url, message)
@@ -234,10 +233,10 @@ NOTE - There is a usage limit of 8 hours```")
           self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
 
   def deployjavaParams(self, message, key):
-      log.debug("Parsing build params")
+      log.info("Parsing build params")
       s = self.message.split("|")[1].strip()
       self.buildparams = dict(item.split("=") for item in s.split(","))
-      log.debug(self.buildparams)
+      log.info(self.buildparams)
       url = JENKINS_URL.format(JENKINS_JAVA_JOB, JENKINS_TOKEN, key)
       if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
           self.parseBuild(url, message)
@@ -267,12 +266,12 @@ NOTE - There is a usage limit of 8 hours```")
           if self.overridedict[key] == self.userdict[id]:
               log.info("take over")
               response = topics[key].format(self.overridedict[key], key)
-              self.reservedict[key] = [self.overridedict[key], datetime.now()]
+              self.reservedict[key] = [self.overridedict[key], datetime.now(), self.channel]
               log.info("Posting to {0}: {1}".format(self.channel, response))
               self.post(self.channel, response)
       
       self.overridedict = {}
-      
+
       
 # Main gateway
 if __name__ == "__main__":
