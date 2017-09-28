@@ -22,9 +22,17 @@ JENKINS_TOKEN=os.environ.get("JENKINS_TOKEN", None)
 JENKINS_RUBY_JOB=os.environ.get("JENKINS_RUBY_JOB", None)
 JENKINS_JAVA_JOB=os.environ.get("JENKINS_JAVA_JOB", None)
 JENKINS_FULL_JOB=os.environ.get("JENKINS_FULL_JOB", None)
+JENKINS_DEPLOY_WHAT_U_WANT=os.environ.get("JENKINS_DEPLOY_WHAT_U_WANT", None)
+JENKINS_RUN_DATAGEN_JOB=os.environ.get("JENKINS_RUN_DATAGEN_JOB", None)
+JENKINS_RUN_BVT_JOB=os.environ.get("JENKINS_RUN_BVT_JOB", None)
 JENKINS_RUBY_JOB_LINK=os.environ.get("JENKINS_RUBY_JOB_LINK", "jenkins url")
 JENKINS_JAVA_JOB_LINK=os.environ.get("JENKINS_JAVA_JOB_LINK", "jenkins url")
 JENKINS_FULL_JOB_LINK=os.environ.get("JENKINS_FULL_JOB_LINK", "jenkins url")
+JENKINS_DEPLOY_WHAT_U_WANT_LINK=os.environ.get("JENKINS_DEPLOY_WHAT_U_WANT_LINK", "jenkins url")
+JENKINS_RUN_DATAGEN_LINK=os.environ.get("JENKINS_RUN_DATAGEN_LINK", "jenkins url")
+JENKINS_RUN_BVT_LINK=os.environ.get("JENKINS_RUN_BVT_LINK", "jenkins url")
+
+
 BUILDPARAMS_FILE=os.environ.get("BUILDPARAMS_FILE", None)
 
 #Debug logging
@@ -129,7 +137,17 @@ class QASlackBot:
           # deploy ruby | ApiVersion=SAV-3000,WebVersion=master
       elif self.message.lower().startswith(key) and (self.message.lower().find(" deploy") <  self.message.lower().find(" ruby")) and not self.message.lower().endswith("java") and "|" in self.message and "Manifest" not in self.message:
            self.deployrubyParams(message, key)  
-                
+             # deploy what you want
+      elif self.message.lower().startswith(key) and (self.message.lower().find(" deploy") <  self.message.lower().find(" only")) and not self.message.lower().endswith("only") and "|" in self.message and ";" not in self.message:
+          self.deploywhatyouwant(message, key)
+           
+           # run datagen only
+      elif self.message.lower().startswith(key) and (self.message.lower().find(" run") <  self.message.lower().find(" datagen")) and self.message.lower().endswith("datagen") :
+          self.rundatagen(message, key)     
+           # run BVT
+      elif self.message.lower().startswith(key) and (self.message.lower().find(" run") <  self.message.lower().find(" bvt")) and  self.message.lower().endswith("bvt"):
+          self.runbvt(message, key)       
+          
           #respond to user's secondary msg
     if self.message.lower() == 'y' :
         self.overrideReservation(message, key)
@@ -142,7 +160,7 @@ class QASlackBot:
 
     return chan.send_message(message)
 
-  def launchJenkins(self, url, message):
+  def launchJenkins(self, url):
       log.debug(url)
       r = requests.get(url)
       if r.status_code != 201:
@@ -150,7 +168,7 @@ class QASlackBot:
       else:
          log.info("Launched Jenkins job "+url)  
     
-  def parseBuild(self, url, message):
+  def parseBuild(self, url):
        flag=True
        for k in self.buildparams.keys():
                if k in self.buildparamsList:
@@ -159,14 +177,21 @@ class QASlackBot:
                    flag=False
                    self.post(self.channel, "`Check the parameters passed! Try @qabot help`")
        if flag:         
-          self.launchJenkins(url, message)
+          self.launchJenkins(url)
           link =""
           if "ruby" in url.lower():
               link = JENKINS_RUBY_JOB_LINK
           elif  "java" in url.lower():
               link = JENKINS_JAVA_JOB_LINK
           elif "full" in url.lower():
-              link = JENKINS_FULL_JOB_LINK       
+              link = JENKINS_FULL_JOB_LINK 
+          elif "what_you_want" in url.lower():
+              link = JENKINS_DEPLOY_WHAT_U_WANT_LINK       
+          elif "datagen" in url.lower():
+              link = JENKINS_RUN_DATAGEN_LINK    
+          elif "build-verification" in url.lower():
+              link = JENKINS_RUN_BVT_LINK    
+                     
           self.post(self.channel, "Jenkins job successfully launched at "+ link)      
           
        self.buildparams = {}   
@@ -177,7 +202,8 @@ qa1\n qa2\n qa3\n qa4\n stage2\n sandbox1\nWhen you are done, type 'release <sta
 reservations, type @qabot status\nTo deploy to the reserved stack:\n<stack> deploy full OR\n<stack> deploy full | ApiVersion=SAV-3001-api,WebVersion=SAV-3000-web,\
 RabbitConsumersVersion=master,AdminVersion=master,CsrVersion=master,Manifest=20170909\nDeploy Ruby only with <stack> deploy ruby \
 OR <stack> deploy ruby | ApiVersion=master,WebVersion=SAV-3000-web\nDeploy Java only with <stack> deploy java OR <stack> deploy java | Manifest=20170909\n\
-NOTE - There is a usage limit of 8 hours```")
+*Deploy specific versions only with <stack> deploy only | ApiVersion=master,Manifest=20170909\nRun datagen to refresh data with <stack> run datagen\n\
+Run BVT with <stack> run bvt\n\nNOTE - There is a usage limit of 8 hours```")
 
   def status(self):
       if not self.reservedict.keys():
@@ -210,56 +236,66 @@ NOTE - There is a usage limit of 8 hours```")
   def fulldeploy(self, message, key):
       url = JENKINS_URL.format(JENKINS_FULL_JOB, JENKINS_TOKEN, key)
       if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
-          self.parseBuild(url, message)
+          self.parseBuild(url)
       else:
           self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
 
   def fulldeployParams(self, message, key):
-      log.info("Parsing build params")
+      log.debug("Parsing build params")
       s = self.message.split("|")[1].strip()
       self.buildparams = dict(item.split("=") for item in s.split(","))
-      log.info(self.buildparams)
+      log.debug(self.buildparams)
       url = JENKINS_URL.format(JENKINS_FULL_JOB, JENKINS_TOKEN, key)
       if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
-          self.parseBuild(url, message)
+          self.parseBuild(url)
       else:
           self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
 
   def deployjava(self, message, key):
       url = JENKINS_URL.format(JENKINS_JAVA_JOB, JENKINS_TOKEN, key)
       if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
-          self.parseBuild(url, message)
+          self.parseBuild(url)
       else:
           self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
 
   def deployjavaParams(self, message, key):
-      log.info("Parsing build params")
+      log.debug("Parsing build params")
       s = self.message.split("|")[1].strip()
       self.buildparams = dict(item.split("=") for item in s.split(","))
       log.info(self.buildparams)
       url = JENKINS_URL.format(JENKINS_JAVA_JOB, JENKINS_TOKEN, key)
       if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
-          self.parseBuild(url, message)
+          self.parseBuild(url)
       else:
           self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
 
   def deployruby(self, message, key):
       url = JENKINS_URL.format(JENKINS_RUBY_JOB, JENKINS_TOKEN, key)
       if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
-          self.parseBuild(url, message)
+          self.parseBuild(url)
       else:
           self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
 
   def deployrubyParams(self, message, key):
-      log.info("Parsing build params")
+      log.debug("Parsing build params")
       s = self.message.split("|")[1].strip()
       self.buildparams = dict(item.split("=") for item in s.split(","))
       url = JENKINS_URL.format(JENKINS_RUBY_JOB, JENKINS_TOKEN, key)
       if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
-          self.parseBuild(url, message)
+          self.parseBuild(url)
       else:
           self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
 
+  def deploywhatyouwant(self, message, key):
+      log.debug("Parsing build params")
+      s = self.message.split("|")[1].strip()
+      self.buildparams = dict(item.split("=") for item in s.split(","))
+      url = JENKINS_URL.format(JENKINS_DEPLOY_WHAT_U_WANT, JENKINS_TOKEN, key)
+      if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
+          self.parseBuild(url)
+      else:
+          self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
+          
   def overrideReservation(self, message, key):
       id = message['user']
       for key in self.overridedict.keys():
@@ -272,7 +308,21 @@ NOTE - There is a usage limit of 8 hours```")
       
       self.overridedict = {}
 
-      
+  def rundatagen(self, message, key):
+      url = JENKINS_URL.format(JENKINS_RUN_DATAGEN_JOB, JENKINS_TOKEN, key)
+      if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
+          self.parseBuild(url)
+      else:
+          self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
+          
+  def runbvt(self, message, key):
+      url = JENKINS_URL.format(JENKINS_RUN_BVT_JOB, JENKINS_TOKEN, key)
+      if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
+          self.parseBuild(url)
+      else:
+          self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
+          
+              
 # Main gateway
 if __name__ == "__main__":
 
