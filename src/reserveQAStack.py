@@ -25,14 +25,14 @@ JENKINS_FULL_JOB=os.environ.get("JENKINS_FULL_JOB", None)
 JENKINS_DEPLOY_WHAT_U_WANT=os.environ.get("JENKINS_DEPLOY_WHAT_U_WANT", None)
 JENKINS_RUN_DATAGEN_JOB=os.environ.get("JENKINS_RUN_DATAGEN_JOB", None)
 JENKINS_RUN_BVT_JOB=os.environ.get("JENKINS_RUN_BVT_JOB", None)
+JENKINS_RUN_PROD_SMOKE=os.environ.get("JENKINS_RUN_PROD_SMOKE", None)
 JENKINS_RUBY_JOB_LINK=os.environ.get("JENKINS_RUBY_JOB_LINK", "jenkins url")
 JENKINS_JAVA_JOB_LINK=os.environ.get("JENKINS_JAVA_JOB_LINK", "jenkins url")
 JENKINS_FULL_JOB_LINK=os.environ.get("JENKINS_FULL_JOB_LINK", "jenkins url")
 JENKINS_DEPLOY_WHAT_U_WANT_LINK=os.environ.get("JENKINS_DEPLOY_WHAT_U_WANT_LINK", "jenkins url")
 JENKINS_RUN_DATAGEN_LINK=os.environ.get("JENKINS_RUN_DATAGEN_LINK", "jenkins url")
 JENKINS_RUN_BVT_LINK=os.environ.get("JENKINS_RUN_BVT_LINK", "jenkins url")
-
-
+JENKINS_RUN_PROD_SMOKE_LINK=os.environ.get("JENKINS_RUN_PROD_SMOKE_LINK", "jenkins url")
 BUILDPARAMS_FILE=os.environ.get("BUILDPARAMS_FILE", None)
 
 #Debug logging
@@ -147,6 +147,9 @@ class QASlackBot:
            # run BVT
       elif self.message.lower().startswith(key) and (self.message.lower().find(" run") <  self.message.lower().find(" bvt")) and  self.message.lower().endswith("bvt"):
           self.runbvt(message, key)       
+         # run Prod smoke
+      elif self.message.lower().startswith(key) and (self.message.lower().find(" run") <  self.message.lower().find(" prod")) and  self.message.lower().endswith(" smoke"):
+          self.runprodsmoke(message, key)   
           
           #respond to user's secondary msg
     if self.message.lower() == 'y' :
@@ -190,7 +193,9 @@ class QASlackBot:
           elif "datagen" in url.lower():
               link = JENKINS_RUN_DATAGEN_LINK    
           elif "build-verification" in url.lower():
-              link = JENKINS_RUN_BVT_LINK    
+              link = JENKINS_RUN_BVT_LINK   
+          elif "prod-smoke" in url.lower():
+              link = JENKINS_RUN_PROD_SMOKE_LINK 
                      
           self.post(self.channel, "Jenkins job successfully launched at "+ link)      
           
@@ -203,7 +208,7 @@ reservations, type @qabot status\nTo deploy to the reserved stack:\n<stack> depl
 RabbitConsumersVersion=master,AdminVersion=master,CsrVersion=master,Manifest=20170909\nDeploy Ruby only with <stack> deploy ruby \
 OR <stack> deploy ruby | ApiVersion=master,WebVersion=SAV-3000-web\nDeploy Java only with <stack> deploy java OR <stack> deploy java | Manifest=20170909\n\
 *Deploy specific versions only with <stack> deploy only | ApiVersion=master,Manifest=20170909\nRun datagen to refresh data with <stack> run datagen\n\
-Run BVT with <stack> run bvt\n\nNOTE - There is a usage limit of 8 hours```")
+Run BVT with <stack> run bvt\nRun Production smoke with <stack> run prod smoke\n\nNOTE - There is a usage limit of 8 hours```")
 
   def status(self):
       if not self.reservedict.keys():
@@ -321,6 +326,13 @@ Run BVT with <stack> run bvt\n\nNOTE - There is a usage limit of 8 hours```")
           self.parseBuild(url)
       else:
           self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")
+          
+  def runprodsmoke(self, message, key):
+      url = JENKINS_URL.format(JENKINS_RUN_PROD_SMOKE, JENKINS_TOKEN, key)
+      if self.reservedict and self.userdict[message['user']] in self.reservedict[key]:
+          self.parseBuild(url)
+      else:
+          self.post(self.channel, "`Please reserve the stack before Jenkins deploy`")          
           
               
 # Main gateway
