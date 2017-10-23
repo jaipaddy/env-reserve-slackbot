@@ -4,5 +4,6 @@
   "qa2": "`{}` has reserved the stack - `{}`",
   "qa4": "`{}` has reserved the stack - `{}`",
   "sandbox1": "`{}` has reserved the stack - `{}`",
+  "prod": "`{}` has reserved the stack - `{}`",
   "stage2": "`{}` has reserved the stack - `{}`"
 }
