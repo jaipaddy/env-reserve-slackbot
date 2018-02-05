@@ -95,7 +95,8 @@ class QASlackBot:
                     del self.reservedict[key]
                             
       except Exception as e:
-        log.error("Exception: ", e.message)
+        pass
+        #log.error("Exception: ", e.message)
 
 
   def process_message(self, message):
