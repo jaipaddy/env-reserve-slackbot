@@ -22,5 +22,5 @@ Use Slack chat bot to help streamline test environment reservation and deploymen
 # Applications
 The methodology used in this app can be extended to spinning-up new test environments in the cloud and deploying specific versions
 
-# Credit
+# Resource
 https://github.com/jeffk/PyBot
